@@ -1,0 +1,2 @@
+# Sealix
+File Encryption tool
