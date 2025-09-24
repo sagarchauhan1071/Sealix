@@ -5,6 +5,19 @@ import datetime
 import json
 import os
 
+# Import the client and admin interfaces with correct file names
+try:
+    from phase2_client_enhanced import ClientInterface
+except ImportError:
+    print("Warning: phase2_client_enhanced.py not found. Client interface will not be available.")
+    ClientInterface = None
+
+try:
+    from enhanced_admin import AdminInterface
+except ImportError:
+    print("Warning: enhanced_admin.py not found. Admin interface will not be available.")
+    AdminInterface = None
+
 class CyberSecurityApp:
     def __init__(self):
         # File-based user storage
@@ -176,7 +189,7 @@ class CyberSecurityApp:
         header_frame.pack(fill="x", pady=(0, 20))
         
         title_label = ctk.CTkLabel(header_frame, 
-                                 text="🔑 SECURE LOGIN", 
+                                 text="🔒 SECURE LOGIN", 
                                  font=("Courier New", 24, "bold"),
                                  text_color="#00ff41")
         title_label.pack(pady=15)
@@ -240,7 +253,7 @@ class CyberSecurityApp:
         login_btn.pack(pady=10)
         
         register_btn = ctk.CTkButton(button_frame, 
-                                   text="📝 CREATE NEW ACCOUNT",
+                                   text="🆕 CREATE NEW ACCOUNT",
                                    command=self.show_registration_page,
                                    font=("Courier New", 12),
                                    fg_color="transparent",
@@ -252,120 +265,50 @@ class CyberSecurityApp:
         register_btn.pack(pady=5)
     
     def show_dashboard(self):
-        """Display user dashboard after successful login"""
-        self.clear_frame()
-        
-        # Header with user info
-        header_frame = ctk.CTkFrame(self.main_frame, fg_color="#1a1a1a", corner_radius=15)
-        header_frame.pack(fill="x", pady=(0, 20))
-        
-        if self.current_role == "admin":
-            title_text = "🛡️ ADMIN DASHBOARD"
-            title_color = "#ff4444"
-        else:
-            title_text = "👤 USER DASHBOARD"
-            title_color = "#00ff41"
-        
-        title_label = ctk.CTkLabel(header_frame, 
-                                 text=title_text, 
-                                 font=("Courier New", 24, "bold"),
-                                 text_color=title_color)
-        title_label.pack(pady=15)
-        
-        user_info = ctk.CTkLabel(header_frame, 
-                               text=f"» Welcome, {self.current_user} | Role: {self.current_role.upper()} «", 
-                               font=("Courier New", 12),
-                               text_color="#888888")
-        user_info.pack(pady=(0, 15))
-        
-        # Dashboard content
-        content_frame = ctk.CTkFrame(self.main_frame, fg_color="#1a1a1a", corner_radius=15)
-        content_frame.pack(fill="both", expand=True, pady=(0, 20))
-        
-        if self.current_role == "admin":
-            self.show_admin_content(content_frame)
-        else:
-            self.show_user_content(content_frame)
-        
-        # Logout button
-        logout_btn = ctk.CTkButton(self.main_frame, 
-                                 text="🚪 LOGOUT",
-                                 command=self.logout,
-                                 font=("Courier New", 12),
-                                 fg_color="#cc3333",
-                                 hover_color="#ff4444",
-                                 height=35,
-                                 width=120)
-        logout_btn.pack(pady=10)
+        """Display user dashboard after successful login - This method is called when returning from client/admin"""
+        self.show_login_page()
     
-    def show_admin_content(self, parent):
-        """Show admin-specific content"""
-        ctk.CTkLabel(parent, 
-                   text="ADMIN CONTROL PANEL", 
-                   font=("Courier New", 16, "bold"),
-                   text_color="#ff4444").pack(pady=20)
+    def launch_client_interface(self, username):
+        """Launch the client interface for regular users"""
+        if ClientInterface is None:
+            messagebox.showerror("❌ Error", "Client interface is not available. Make sure phase2_client_enhanced.py exists.")
+            return
         
-        # User management section
-        users_frame = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=10)
-        users_frame.pack(fill="x", padx=20, pady=10)
-        
-        ctk.CTkLabel(users_frame, 
-                   text="📊 REGISTERED USERS:", 
-                   font=("Courier New", 12, "bold"),
-                   text_color="#ffffff").pack(pady=(10, 5))
-        
-        # Display all users
-        users_text = ""
-        for username, user_data in self.users_data.items():
-            role_icon = "👑" if user_data["role"] == "admin" else "👤"
-            users_text += f"{role_icon} {username} | {user_data['role'].upper()} | {user_data['timestamp']}\n"
-        
-        users_display = ctk.CTkTextbox(users_frame, 
-                                     height=150,
-                                     font=("Courier New", 10),
-                                     fg_color="#1a1a1a")
-        users_display.pack(fill="x", padx=10, pady=(0, 10))
-        users_display.insert("1.0", users_text if users_text else "No users found")
-        users_display.configure(state="disabled")
-        
-        # File info
-        file_info_label = ctk.CTkLabel(users_frame, 
-                                     text=f"📁 Data stored in: {self.users_file}", 
-                                     font=("Courier New", 9),
-                                     text_color="#888888")
-        file_info_label.pack(pady=(0, 10))
+        try:
+            # Hide the main login window
+            self.root.withdraw()
+            
+            # Launch client interface
+            client = ClientInterface(self, username)
+            client.run()
+            
+            # Show the main window again when client closes
+            self.root.deiconify()
+            
+        except Exception as e:
+            messagebox.showerror("❌ Error", f"Failed to launch client interface: {str(e)}")
+            self.root.deiconify()
     
-    def show_user_content(self, parent):
-        """Show regular user content"""
-        ctk.CTkLabel(parent, 
-                   text="USER PANEL", 
-                   font=("Courier New", 16, "bold"),
-                   text_color="#00ff41").pack(pady=20)
+    def launch_admin_interface(self):
+        """Launch the admin interface for admin users"""
+        if AdminInterface is None:
+            messagebox.showerror("❌ Error", "Admin interface is not available. Make sure enhanced_admin.py exists.")
+            return
         
-        # User info
-        info_frame = ctk.CTkFrame(parent, fg_color="#2a2a2a", corner_radius=10)
-        info_frame.pack(fill="x", padx=20, pady=10)
-        
-        ctk.CTkLabel(info_frame, 
-                   text="🔐 ACCOUNT INFORMATION", 
-                   font=("Courier New", 12, "bold"),
-                   text_color="#ffffff").pack(pady=(10, 5))
-        
-        # Get user info from file data
-        user_data = self.users_data.get(self.current_user, {})
-        
-        if user_data:
-            info_text = f"Username: {self.current_user}\nRole: {user_data['role'].upper()}\nRegistered: {user_data['timestamp']}\nStatus: AUTHENTICATED ✅\nData Source: File-based storage"
-        else:
-            info_text = "User information not available"
-        
-        info_display = ctk.CTkTextbox(info_frame, 
-                                    height=120,
-                                    font=("Courier New", 10),
-                                    fg_color="#1a1a1a")
-        info_display.pack(fill="x", padx=10, pady=(0, 10))
-        info_display.insert("1.0", info_text)
-        info_display.configure(state="disabled")
+        try:
+            # Hide the main login window
+            self.root.withdraw()
+            
+            # Launch admin interface
+            admin = AdminInterface(self)
+            admin.run()
+            
+            # Show the main window again when admin closes
+            self.root.deiconify()
+            
+        except Exception as e:
+            messagebox.showerror("❌ Error", f"Failed to launch admin interface: {str(e)}")
+            self.root.deiconify()
     
     def register_user(self):
         """Handle user registration"""
@@ -420,7 +363,7 @@ class CyberSecurityApp:
             messagebox.showerror("❌ Error", f"Registration failed: {str(e)}")
     
     def login_user(self):
-        """Handle user login"""
+        """Handle user login and route to appropriate interface"""
         username = self.login_username.get().strip()
         password = self.login_password.get()
 
@@ -447,13 +390,18 @@ class CyberSecurityApp:
                 self.current_role = user_data["role"]
                 print(f"Debug - Login successful: user={self.current_user}, role={self.current_role}")
                 
-                messagebox.showinfo("✅ Success", f"Login successful!\nWelcome, {username}")
-                
                 # Clear the form fields
                 self.login_username.delete(0, 'end')
                 self.login_password.delete(0, 'end')
                 
-                self.show_dashboard()
+                # Route to appropriate interface based on role
+                if self.current_role == "admin":
+                    messagebox.showinfo("✅ Admin Login", f"Admin login successful!\nWelcome, {username}")
+                    self.launch_admin_interface()
+                else:
+                    messagebox.showinfo("✅ User Login", f"User login successful!\nWelcome, {username}")
+                    self.launch_client_interface(username)
+                
             else:
                 print("Debug - Password doesn't match")
                 messagebox.showerror("❌ Error", "Invalid password")

@@ -33,7 +33,7 @@ class AdminInterface:
         """Load system logs from file"""
         try:
             if os.path.exists(self.logs_file):
-                with open(self.logs_file, 'r') as f:
+                with open(self.logs_file, 'r', encoding='utf-8') as f:
                     self.logs_data = json.load(f)
             else:
                 self.logs_data = []
@@ -44,8 +44,8 @@ class AdminInterface:
     def save_logs(self):
         """Save logs to file"""
         try:
-            with open(self.logs_file, 'w') as f:
-                json.dump(self.logs_data, f, indent=2)
+            with open(self.logs_file, 'w', encoding='utf-8') as f:
+                json.dump(self.logs_data, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"Error saving logs: {e}")
     
@@ -53,7 +53,7 @@ class AdminInterface:
         """Load files data from file"""
         try:
             if os.path.exists(self.files_data_file):
-                with open(self.files_data_file, 'r') as f:
+                with open(self.files_data_file, 'r', encoding='utf-8') as f:
                     self.files_data = json.load(f)
             else:
                 self.files_data = {}
@@ -64,8 +64,8 @@ class AdminInterface:
     def save_files_data(self):
         """Save files data to file"""
         try:
-            with open(self.files_data_file, 'w') as f:
-                json.dump(self.files_data, f, indent=2)
+            with open(self.files_data_file, 'w', encoding='utf-8') as f:
+                json.dump(self.files_data, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"Error saving files data: {e}")
     
@@ -197,7 +197,7 @@ class AdminInterface:
         activity_frame = ctk.CTkFrame(dashboard_tab, fg_color="#1a1a1a")
         activity_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
         
-        ctk.CTkLabel(activity_frame, text="RECENT SYSTEM ACTIVITY", 
+        ctk.CTkLabel(activity_frame, text="RECENT SYSTEM ACTIVITY (Last 10 Actions)", 
                    font=("Courier New", 16, "bold"),
                    text_color="#00ff41").pack(pady=15)
         
@@ -224,15 +224,38 @@ class AdminInterface:
         """Setup system logs tab"""
         logs_tab = self.tabview.tab("📋 System Logs")
         
-        ctk.CTkLabel(logs_tab, text="SYSTEM ACTIVITY LOGS", 
+        # Header with controls
+        logs_header = ctk.CTkFrame(logs_tab, fg_color="transparent")
+        logs_header.pack(fill="x", padx=20, pady=(15, 10))
+        
+        ctk.CTkLabel(logs_header, text="SYSTEM ACTIVITY LOGS", 
                    font=("Courier New", 18, "bold"),
-                   text_color="#00ff41").pack(pady=15)
+                   text_color="#00ff41").pack(side="left")
+        
+        # Log filtering options
+        filter_frame = ctk.CTkFrame(logs_header, fg_color="#1a1a1a", corner_radius=10)
+        filter_frame.pack(side="right", padx=(20, 0))
+        
+        ctk.CTkLabel(filter_frame, text="Filter:", 
+                   font=("Courier New", 10, "bold"),
+                   text_color="#ffffff").pack(side="left", padx=(10, 5))
+        
+        self.log_filter_var = ctk.StringVar(value="ALL")
+        filter_options = ["ALL", "LOGIN", "LOGOUT", "ENCRYPTION", "DECRYPTION", "KEY_OPERATIONS", "ERRORS"]
+        
+        self.log_filter_dropdown = ctk.CTkOptionMenu(filter_frame, 
+                                                   values=filter_options,
+                                                   variable=self.log_filter_var,
+                                                   command=self.filter_logs,
+                                                   font=("Courier New", 9),
+                                                   width=120)
+        self.log_filter_dropdown.pack(side="left", padx=(0, 10), pady=5)
         
         # Logs display
-        self.logs_text = ctk.CTkTextbox(logs_tab, height=500,
+        self.logs_text = ctk.CTkTextbox(logs_tab, height=480,
                                       font=("Courier New", 10),
                                       fg_color="#0a0a0a")
-        self.logs_text.pack(fill="both", expand=True, padx=20, pady=20)
+        self.logs_text.pack(fill="both", expand=True, padx=20, pady=(0, 20))
     
     def setup_files_tab(self):
         """Setup files data tab"""
@@ -252,7 +275,7 @@ class AdminInterface:
         """Load and display users data"""
         try:
             if os.path.exists(self.users_file):
-                with open(self.users_file, 'r') as f:
+                with open(self.users_file, 'r', encoding='utf-8') as f:
                     users_data = json.load(f)
                 
                 self.users_text.delete("1.0", "end")
@@ -267,6 +290,17 @@ class AdminInterface:
                     user_display += f"ROLE: {user_info.get('role', 'user').upper()}\n"
                     user_display += f"PASSWORD HASH: {user_info.get('password', 'N/A')}\n"
                     user_display += f"REGISTERED: {user_info.get('timestamp', 'N/A')}\n"
+                    
+                    # Add user activity summary from logs
+                    user_logs = [log for log in self.logs_data if log.get('username') == username]
+                    if user_logs:
+                        last_activity = max(user_logs, key=lambda x: x.get('timestamp', ''))
+                        user_display += f"LAST ACTIVITY: {last_activity.get('timestamp', 'N/A')} - {last_activity.get('action', 'N/A')}\n"
+                        user_display += f"TOTAL ACTIONS: {len(user_logs)}\n"
+                    else:
+                        user_display += f"LAST ACTIVITY: No activity recorded\n"
+                        user_display += f"TOTAL ACTIONS: 0\n"
+                    
                     user_display += "-" * 60 + "\n\n"
                     self.users_text.insert("end", user_display)
                 
@@ -280,30 +314,66 @@ class AdminInterface:
             self.users_text.insert("end", f"Error loading users data: {str(e)}")
             return 0
     
-    def load_logs_display(self):
-        """Load and display system logs"""
+    def load_logs_display(self, filter_type="ALL"):
+        """Load and display system logs with optional filtering"""
         self.logs_text.delete("1.0", "end")
         
         if not self.logs_data:
             self.logs_text.insert("end", "No system logs available.")
             return 0
         
+        # Filter logs based on selected filter
+        filtered_logs = self.logs_data
+        if filter_type != "ALL":
+            if filter_type == "LOGIN":
+                filtered_logs = [log for log in self.logs_data if "LOGIN" in log.get('action', '').upper()]
+            elif filter_type == "LOGOUT":
+                filtered_logs = [log for log in self.logs_data if "LOGOUT" in log.get('action', '').upper()]
+            elif filter_type == "ENCRYPTION":
+                filtered_logs = [log for log in self.logs_data if "ENCRYPT" in log.get('action', '').upper()]
+            elif filter_type == "DECRYPTION":
+                filtered_logs = [log for log in self.logs_data if "DECRYPT" in log.get('action', '').upper()]
+            elif filter_type == "KEY_OPERATIONS":
+                filtered_logs = [log for log in self.logs_data if "KEY" in log.get('action', '').upper()]
+            elif filter_type == "ERRORS":
+                filtered_logs = [log for log in self.logs_data if "FAILED" in log.get('action', '').upper() or "ERROR" in log.get('action', '').upper()]
+        
         header = "=" * 80 + "\n"
-        header += "SYSTEM ACTIVITY LOGS\n"
+        header += f"SYSTEM ACTIVITY LOGS - FILTER: {filter_type}\n"
+        header += f"Showing {len(filtered_logs)} of {len(self.logs_data)} total logs\n"
         header += "=" * 80 + "\n\n"
         self.logs_text.insert("end", header)
         
         # Sort logs by timestamp (newest first)
-        sorted_logs = sorted(self.logs_data, key=lambda x: x.get('timestamp', ''), reverse=True)
+        sorted_logs = sorted(filtered_logs, key=lambda x: x.get('timestamp', ''), reverse=True)
         
         for log in sorted_logs:
-            log_display = f"[{log.get('timestamp', 'N/A')}] "
-            log_display += f"{log.get('username', 'SYSTEM')} - "
-            log_display += f"{log.get('action', 'UNKNOWN')}: "
-            log_display += f"{log.get('details', 'No details')}\n"
+            # Enhanced log display with color coding based on action type
+            timestamp = log.get('timestamp', 'N/A')
+            username = log.get('username', 'SYSTEM')
+            action = log.get('action', 'UNKNOWN')
+            details = log.get('details', 'No details')
+            
+            # Add session info if available
+            session_info = log.get('session_info', '')
+            client_version = log.get('client_version', '')
+            
+            log_display = f"[{timestamp}] {username} - {action}\n"
+            log_display += f"  Details: {details}\n"
+            
+            if session_info:
+                log_display += f"  Session: {session_info}\n"
+            if client_version:
+                log_display += f"  Version: {client_version}\n"
+            
+            log_display += "-" * 60 + "\n\n"
             self.logs_text.insert("end", log_display)
         
-        return len(self.logs_data)
+        return len(filtered_logs)
+    
+    def filter_logs(self, selected_filter):
+        """Handle log filtering when dropdown changes"""
+        self.load_logs_display(selected_filter)
     
     def load_files_display(self):
         """Load and display files data"""
@@ -324,7 +394,20 @@ class AdminInterface:
             
             if isinstance(files_info, dict):
                 for key, value in files_info.items():
-                    user_section += f"{key.upper()}: {value}\n"
+                    # Format timestamps for better readability
+                    if key.endswith('_timestamp') or key.endswith('_accessed') or key.endswith('_loaded') or key.endswith('_generated'):
+                        try:
+                            if isinstance(value, str) and 'T' in value:
+                                # ISO format timestamp
+                                dt = datetime.datetime.fromisoformat(value.replace('Z', '+00:00'))
+                                formatted_time = dt.strftime('%Y-%m-%d %H:%M:%S')
+                                user_section += f"{key.upper().replace('_', ' ')}: {formatted_time}\n"
+                            else:
+                                user_section += f"{key.upper().replace('_', ' ')}: {value}\n"
+                        except:
+                            user_section += f"{key.upper().replace('_', ' ')}: {value}\n"
+                    else:
+                        user_section += f"{key.upper().replace('_', ' ')}: {value}\n"
             else:
                 user_section += f"DATA: {files_info}\n"
             
@@ -343,92 +426,196 @@ class AdminInterface:
         total_logs = len(self.logs_data)
         self.total_logs_label.configure(text=str(total_logs))
         
-        # Update recent activity
+        # Calculate active sessions (users who logged in within last 24 hours)
+        current_time = datetime.datetime.now()
+        active_sessions = 0
+        
+        for log in self.logs_data:
+            if "LOGIN" in log.get('action', '').upper():
+                try:
+                    log_time = datetime.datetime.strptime(log.get('timestamp', ''), '%Y-%m-%d %H:%M:%S')
+                    if (current_time - log_time).days == 0:  # Same day
+                        active_sessions += 1
+                except:
+                    pass
+        
+        # Ensure at least 1 if admin is currently active
+        if active_sessions == 0:
+            active_sessions = 1
+            
+        self.active_sessions_label.configure(text=str(active_sessions))
+        
+        # Update recent activity (last 10 activities)
+        self.update_recent_activity()
+    
+    def update_recent_activity(self):
+        """Update the recent activity display on dashboard"""
         self.activity_text.delete("1.0", "end")
         
-        activity_header = "=== RECENT SYSTEM ACTIVITY ===\n\n"
+        activity_header = "=== RECENT SYSTEM ACTIVITY (Last 10 Actions) ===\n\n"
         self.activity_text.insert("end", activity_header)
         
         if self.logs_data:
-            # Show last 10 logs
+            # Show last 10 logs, sorted by timestamp (newest first)
             recent_logs = sorted(self.logs_data, key=lambda x: x.get('timestamp', ''), reverse=True)[:10]
             
-            for log in recent_logs:
-                activity_line = f"[{log.get('timestamp', 'N/A')}] "
-                activity_line += f"{log.get('username', 'SYSTEM')} - "
-                activity_line += f"{log.get('action', 'UNKNOWN')}: "
-                activity_line += f"{log.get('details', 'No details')}\n"
+            for i, log in enumerate(recent_logs, 1):
+                timestamp = log.get('timestamp', 'N/A')
+                username = log.get('username', 'SYSTEM')
+                action = log.get('action', 'UNKNOWN')
+                details = log.get('details', 'No details')
+                
+                # Truncate long details for dashboard view
+                if len(details) > 60:
+                    details = details[:57] + "..."
+                
+                activity_line = f"{i:2d}. [{timestamp}] {username}\n"
+                activity_line += f"    Action: {action}\n"
+                activity_line += f"    Details: {details}\n\n"
+                
                 self.activity_text.insert("end", activity_line)
         else:
             self.activity_text.insert("end", "No recent activity recorded.")
     
     def log_action(self, username, action, details):
-        """Log system actions"""
+        """Log system actions with enhanced information"""
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_entry = {
             "timestamp": timestamp,
             "username": username,
             "action": action,
-            "details": details
+            "details": details,
+            "source": "ADMIN_INTERFACE",
+            "session_info": "Admin Dashboard"
         }
         self.logs_data.append(log_entry)
         self.save_logs()
     
     def refresh_all_data(self):
         """Refresh all data"""
-        self.load_logs()
-        self.load_files_data()
-        self.update_dashboard_stats()
-        self.load_logs_display()
-        self.load_files_display()
-        messagebox.showinfo("✅ Success", "All data refreshed successfully!")
-        self.log_action("ADMIN", "DATA_REFRESH", "Admin refreshed all system data")
+        self.log_action("ADMIN", "DATA_REFRESH_START", "Admin initiated full data refresh")
+        
+        try:
+            # Reload data from files
+            self.load_logs()
+            self.load_files_data()
+            
+            # Update all displays
+            self.update_dashboard_stats()
+            self.load_logs_display(self.log_filter_var.get())
+            self.load_files_display()
+            
+            # Log successful refresh
+            self.log_action("ADMIN", "DATA_REFRESH_SUCCESS", 
+                          f"All data refreshed successfully - {len(self.logs_data)} logs, {len(self.files_data)} user files")
+            
+            messagebox.showinfo("✅ Success", "All data refreshed successfully!")
+            
+        except Exception as e:
+            self.log_action("ADMIN", "DATA_REFRESH_FAILED", f"Data refresh failed: {str(e)}")
+            messagebox.showerror("❌ Error", f"Failed to refresh data: {str(e)}")
     
     def clear_logs(self):
-        """Clear system logs"""
-        if messagebox.askyesno("Clear Logs", "Are you sure you want to clear all system logs?"):
-            self.logs_data = []
+        """Clear system logs with confirmation"""
+        if messagebox.askyesno("Clear Logs", 
+                              f"Are you sure you want to clear all {len(self.logs_data)} system logs?\n\nThis action cannot be undone."):
+            
+            # Log the clear action before clearing
+            old_count = len(self.logs_data)
+            self.log_action("ADMIN", "LOGS_CLEAR_INITIATED", 
+                          f"Admin initiated clearing of {old_count} system logs")
+            
+            # Clear logs but keep the clear action log
+            clear_log = self.logs_data[-1]  # Keep the last log entry (the clear action)
+            self.logs_data = [clear_log]
+            
             self.save_logs()
-            self.load_logs_display()
+            self.load_logs_display(self.log_filter_var.get())
             self.update_dashboard_stats()
-            messagebox.showinfo("✅ Success", "System logs cleared successfully!")
-            self.log_action("ADMIN", "LOGS_CLEARED", "Admin cleared all system logs")
+            
+            messagebox.showinfo("✅ Success", f"System logs cleared successfully!\nCleared {old_count} log entries.")
     
     def export_data(self):
-        """Export system data"""
+        """Export system data with enhanced information"""
         try:
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             
             # Load current users data
             users_data = {}
             if os.path.exists(self.users_file):
-                with open(self.users_file, 'r') as f:
+                with open(self.users_file, 'r', encoding='utf-8') as f:
                     users_data = json.load(f)
             
+            # Create comprehensive export data
             export_data = {
-                "export_timestamp": datetime.datetime.now().isoformat(),
+                "export_info": {
+                    "timestamp": datetime.datetime.now().isoformat(),
+                    "exported_by": "ADMIN",
+                    "total_users": len(users_data),
+                    "total_logs": len(self.logs_data),
+                    "total_file_records": len(self.files_data)
+                },
                 "users": users_data,
                 "logs": self.logs_data,
-                "files": self.files_data
+                "files": self.files_data,
+                "statistics": {
+                    "most_active_user": self.get_most_active_user(),
+                    "recent_activity_count": len([log for log in self.logs_data 
+                                                if self.is_recent_activity(log.get('timestamp', ''))]),
+                    "encryption_operations": len([log for log in self.logs_data 
+                                               if 'ENCRYPT' in log.get('action', '').upper()]),
+                    "decryption_operations": len([log for log in self.logs_data 
+                                               if 'DECRYPT' in log.get('action', '').upper()])
+                }
             }
             
-            export_filename = f"admin_export_{timestamp}.json"
-            with open(export_filename, 'w') as f:
-                json.dump(export_data, f, indent=2)
+            export_filename = f"securevault_admin_export_{timestamp}.json"
+            with open(export_filename, 'w', encoding='utf-8') as f:
+                json.dump(export_data, f, indent=2, ensure_ascii=False)
             
-            messagebox.showinfo("✅ Export Complete", f"Data exported successfully to:\n{export_filename}")
-            self.log_action("ADMIN", "DATA_EXPORT", f"Admin exported system data to {export_filename}")
+            self.log_action("ADMIN", "DATA_EXPORT_SUCCESS", 
+                          f"System data exported to {export_filename} - {len(users_data)} users, {len(self.logs_data)} logs")
+            
+            messagebox.showinfo("✅ Export Complete", 
+                              f"Data exported successfully to:\n{export_filename}\n\nExport includes:\n• {len(users_data)} users\n• {len(self.logs_data)} log entries\n• {len(self.files_data)} file records")
             
         except Exception as e:
+            self.log_action("ADMIN", "DATA_EXPORT_FAILED", f"Export failed: {str(e)}")
             messagebox.showerror("❌ Export Error", f"Failed to export data: {str(e)}")
+    
+    def get_most_active_user(self):
+        """Get the most active user from logs"""
+        user_activity = {}
+        for log in self.logs_data:
+            username = log.get('username', 'UNKNOWN')
+            if username != 'ADMIN' and username != 'SYSTEM':
+                user_activity[username] = user_activity.get(username, 0) + 1
+        
+        if user_activity:
+            return max(user_activity.items(), key=lambda x: x[1])
+        return ("No user activity", 0)
+    
+    def is_recent_activity(self, timestamp_str):
+        """Check if activity is within last 24 hours"""
+        try:
+            log_time = datetime.datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
+            current_time = datetime.datetime.now()
+            return (current_time - log_time).days == 0
+        except:
+            return False
     
     def back_to_main(self):
         """Return to main application"""
+        self.log_action("ADMIN", "ADMIN_SESSION_END", "Admin logged out from dashboard")
         self.root.destroy()
         self.main_app.show_dashboard()
     
     def run(self):
         """Run the admin interface"""
+        # Log admin session start
+        self.log_action("ADMIN", "ADMIN_SESSION_START", 
+                       f"Admin dashboard accessed at {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        
         # Initial data load
         self.refresh_all_data()
         self.root.mainloop()
